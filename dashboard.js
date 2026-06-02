@@ -33,8 +33,9 @@ function parsePorts(str) {
 // (e.g. Chrome blocking localhost fetches) instead of just "nothing responded".
 let lastProbeError = "";
 
-// --- probe a port: does anything answer? ---
-async function probe(port) {
+// One fetch attempt against a port. Resolves { ok } — ok:true means *something*
+// answered (even 404/500 counts as "listening").
+async function probeOnce(port) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT);
   try {
@@ -44,16 +45,31 @@ async function probe(port) {
       cache: "no-store",
       redirect: "follow",
     });
-    return true; // any HTTP response (even 404/500) means something is listening
+    return { ok: true };
   } catch (e) {
-    // A "Failed to fetch" can mean closed port OR a non-HTTP service refusing.
-    // We treat a connection-refused style error as down, but keep the message:
-    // if EVERY port fails the same way, it's usually a browser-level block.
-    if (e?.name !== "AbortError") lastProbeError = String(e?.message || e);
-    return false;
+    // "Failed to fetch" = closed port OR a transient hiccup; AbortError = timeout.
+    return { ok: false, error: e };
   } finally {
     clearTimeout(t);
   }
+}
+
+// --- probe a port, with retries ---
+// A live dev server can drop or stall a single request — cold start, mid-compile,
+// or just momentary load when 12 probes fire at once — so one failure isn't proof
+// the port is down. Retry a few times before giving up. A genuinely closed port
+// fails fast (connection refused), so retrying it costs almost nothing.
+async function probe(port) {
+  const ATTEMPTS = 3;
+  for (let i = 0; i < ATTEMPTS; i++) {
+    const r = await probeOnce(port);
+    if (r.ok) return true;
+    // Keep the message so a fully-blank scan can explain itself (e.g. Chrome
+    // blocking localhost). Ignore plain timeouts here — those just mean "retry".
+    if (r.error?.name !== "AbortError") lastProbeError = String(r.error?.message || r.error);
+    if (i < ATTEMPTS - 1) await new Promise((res) => setTimeout(res, 200 * (i + 1)));
+  }
+  return false;
 }
 
 // --- grab the <title> of a responding port ---
