@@ -104,6 +104,7 @@ function card(port, title) {
       <span class="dot up"></span>
       <span class="port">:${port}</span>
       <span class="title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+      <button class="copy" title="Copy ${url}">📋</button>
       <button class="kill" title="Kill the process on this port">✕</button>
     </div>
     <div class="preview">
@@ -133,6 +134,20 @@ function card(port, title) {
   // Click the card header to open the app in the current tab.
   const head = el.querySelector(".card-head");
   head.addEventListener("click", () => { window.location.href = url; });
+
+  // Copy the port's URL to the clipboard, with a brief ✓ confirmation.
+  const copyBtn = el.querySelector(".copy");
+  copyBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = "✓";
+      copyBtn.classList.add("copied");
+      setTimeout(() => { copyBtn.textContent = "📋"; copyBtn.classList.remove("copied"); }, 1200);
+    } catch {
+      statusEl.textContent = `Couldn't copy ${url}`;
+    }
+  });
 
   // Kill the process holding this port (via the native messaging host).
   el.querySelector(".kill").addEventListener("click", (e) => {

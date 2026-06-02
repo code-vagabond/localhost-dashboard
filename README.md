@@ -68,6 +68,7 @@ This:
 |--------|-----|
 | Scan ports | Enter ports/ranges, click **Scan** |
 | Open an app | Click the card's **header bar** (opens in current tab) |
+| Copy a URL | Click **📋** on the card (copies `http://localhost:PORT/`) |
 | Kill a port | Click **✕** on the card (needs native host) |
 | Auto-refresh | Toggle **auto-refresh 10s** |
 
