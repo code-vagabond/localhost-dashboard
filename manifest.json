@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Localhost Dashboard",
+  "version": "1.0.0",
+  "description": "Shows the title + a live preview of whatever is running on your localhost ports.",
+  "permissions": ["storage", "tabs", "nativeMessaging"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Localhost Dashboard"
+  },
+  "chrome_url_overrides": {
+    "newtab": "dashboard.html"
+  },
+  "icons": {}
+}
