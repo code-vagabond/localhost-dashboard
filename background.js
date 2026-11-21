@@ -32,7 +32,43 @@ function killPort(port) {
   });
 }
 
+// Recent Claude Code / Claude Desktop / Codex / Cursor sessions, read by the native host.
+function recentSessions(limit) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: "sessions", limit }, (res) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, error: chrome.runtime.lastError.message });
+      } else {
+        resolve(res || { ok: false, error: "no response from host" });
+      }
+    });
+  });
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "focus") {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: "focus", app: msg.app, path: msg.path }, (res) => {
+      sendResponse(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : res);
+    });
+    return true;
+  }
+  if (msg?.type === "ports" && Array.isArray(msg.ports)) {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: "ports", ports: msg.ports }, (res) => {
+      sendResponse(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : res);
+    });
+    return true;
+  }
+  // Sleep / HRV / resting HR from the health-agent CLI (native/health.js).
+  if (msg?.type === "health") {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: "health", days: msg.days || 7 }, (res) => {
+      sendResponse(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : res || { ok: false, error: "no response from host" });
+    });
+    return true;
+  }
+  if (msg?.type === "sessions") {
+    recentSessions(msg.limit || 7).then(sendResponse);
+    return true;
+  }
   if (msg?.type === "kill" && typeof msg.port === "number") {
     killPort(msg.port).then(sendResponse);
     return true;

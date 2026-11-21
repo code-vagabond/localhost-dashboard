@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Registers the native messaging host so the extension can kill ports.
+# Registers the native messaging host (kill ports + recent AI sessions) for Chrome and Edge.
 # Usage:  ./native/install.sh <EXTENSION_ID>
 # Find <EXTENSION_ID> at chrome://extensions (toggle Developer mode) under the
 # "Localhost Dashboard" card — a long string like "abcdefghijklmnopabcdefghijklmnop".
@@ -15,7 +15,11 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST_NAME="com.linh.localhost_dashboard"
 HOST_SCRIPT="$DIR/kill_port.js"
 LAUNCHER="$DIR/run.sh"
-TARGET_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+# Each browser only looks in its own folder, so register the host with both.
+TARGET_DIRS=(
+  "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+  "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
+)
 
 # Chrome launches native hosts with a minimal PATH (no nvm), so resolve the
 # absolute node path now and bake it into a launcher the manifest points to.
@@ -33,20 +37,20 @@ exec "$NODE_BIN" "$HOST_SCRIPT"
 EOF
 chmod +x "$LAUNCHER" "$HOST_SCRIPT"
 
-mkdir -p "$TARGET_DIR"
-cat > "$TARGET_DIR/$HOST_NAME.json" <<EOF
+for TARGET_DIR in "${TARGET_DIRS[@]}"; do
+  mkdir -p "$TARGET_DIR"
+  cat > "$TARGET_DIR/$HOST_NAME.json" <<EOF
 {
   "name": "$HOST_NAME",
-  "description": "Kill localhost ports for the Localhost Dashboard extension",
+  "description": "Localhost Dashboard helper: kill localhost ports, list recent AI sessions",
   "path": "$LAUNCHER",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://$EXT_ID/"]
 }
 EOF
-
-echo "Installed native host manifest:"
-echo "  $TARGET_DIR/$HOST_NAME.json"
+  echo "Installed: $TARGET_DIR/$HOST_NAME.json"
+done
 echo "  -> launcher: $LAUNCHER"
 echo "  -> node:     $NODE_BIN"
 echo "  -> allowed:  $EXT_ID"
-echo "Done. Reload the extension and try the ✕ button."
+echo "Done. Reload the extension and open a new tab."

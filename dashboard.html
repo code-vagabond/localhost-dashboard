@@ -4,82 +4,666 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Localhost Dashboard</title>
+  <link rel="stylesheet" href="theme.css" />
   <style>
+    /* ---------- layout ----------
+       Wide windows: an app shell — notes on the left stay put, the port grid
+       scrolls on its own. Narrow windows: normal page flow, notes stacked on top. */
+    /* ---------- spacing system ----------
+       No cards, borders or divider lines: segments are separated by whitespace only.
+       Scale: 4 · 8 · 12 · 16 · 24 · 32 · 40 · 56. Proximity does the grouping —
+       rows sit 2px apart, a heading sits 16px above its rows, segments sit 56px apart.
+       Rows carry a 12px inset that bleeds outside the column (negative margin), so
+       their text lines up with the headings while the hover highlight has room. */
     :root {
-      --bg: #0f1115;
-      --panel: #1a1d24;
-      --panel-2: #232733;
-      --border: #2c313c;
-      --text: #e6e9ef;
-      --muted: #8b93a3;
-      --accent: #5b9dff;
-      --good: #3ecf8e;
-      --bad: #ff6b6b;
+      --page: 28px;        /* outer page margin */
+      --col-gap: 64px;     /* notes | right column */
+      --seg-gap: 40px;     /* between segments */
+      --head-gap: 16px;    /* heading -> its content */
+      --inset: 12px;       /* row hover bleed */
+      --lead: 128px;       /* leading label column (tool / port), shared so titles align */
+      --side-gap: 24px;    /* between the right column's segments (trams / outside / health) */
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+    .layout {
+      display: grid;
+      grid-template-columns: clamp(300px, 26vw, 460px) minmax(0, 1fr);
+      height: 100vh;
     }
-    header {
-      position: sticky; top: 0; z-index: 5;
-      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-      padding: 14px 20px;
-      background: rgba(15,17,21,.9);
-      backdrop-filter: blur(8px);
-      border-bottom: 1px solid var(--border);
-    }
-    h1 { font-size: 16px; margin: 0; font-weight: 600; }
-    .spacer { flex: 1; }
-    input, button, textarea {
-      font: inherit; color: var(--text);
-      background: var(--panel-2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 7px 10px;
-    }
-    button { cursor: pointer; }
-    button:hover { border-color: var(--accent); }
-    button.primary { background: var(--accent); color: #0a0d12; border-color: var(--accent); font-weight: 600; }
-    label.small { color: var(--muted); font-size: 12px; }
-    #ports { width: 320px; }
-    .status { color: var(--muted); font-size: 12px; }
+    .ports { overflow-y: auto; min-width: 0; padding-bottom: var(--page); }
 
+    /* ---------- notes ---------- */
+    .notes {
+      display: flex; flex-direction: column;
+      min-height: 0;
+      padding: var(--page) calc(var(--col-gap) / 2) 32px var(--page);
+    }
+    .notes-head {
+      display: flex; align-items: flex-end; gap: 12px;
+      min-height: 56px;
+      margin-bottom: var(--head-gap);
+    }
+    .notes-head h2 {
+      margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650;
+      letter-spacing: -.01em;
+    }
+    /* Date heading doubles as the day picker: click it to open past notes. */
+    .day-picker { position: relative; min-width: 0; }
+    .notes-head h2 { margin: 0; }
+    .day-btn {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+      margin: -6px -10px; padding: 6px 10px;
+      background: transparent; border: 0;
+      border-radius: var(--radius-sm);
+      font: inherit; text-align: left;
+    }
+    .day-btn:hover, .day-btn[aria-expanded="true"] { background: var(--hover); }
+    .day-title { display: inline-flex; align-items: center; gap: 6px; }
+    .day-btn .chevron {
+      width: 16px; height: 16px; color: var(--faint);
+      transition: transform .15s, color .12s;
+    }
+    .day-btn:hover .chevron { color: var(--text); }
+    .day-btn[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+    .day-btn.past .eyebrow { color: var(--accent); }
+
+    .day-menu {
+      position: absolute; top: calc(100% + 10px); left: -10px; z-index: 20;
+      width: min(340px, calc(100vw - 32px));
+      max-height: min(440px, 60vh); overflow-y: auto;
+      padding: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .35), var(--shadow);
+      animation: menu-in .14s ease-out;
+    }
+    .day-menu[hidden] { display: none; }
+    @keyframes menu-in {
+      from { opacity: 0; transform: translateY(-4px) scale(.98); }
+    }
+    .day-group {
+      padding: 10px 10px 4px;
+      color: var(--faint); font-size: 11px; font-weight: 600;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+    .day-option {
+      display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 2px 10px;
+      align-items: center;
+      width: 100%; padding: 8px 10px;
+      background: transparent; border: 0; border-radius: var(--radius-sm);
+      text-align: left; cursor: pointer;
+    }
+    .day-option:hover, .day-option.active { background: var(--surface-2); }
+    .day-option[aria-selected="true"] { background: var(--accent-soft); }
+    .day-option .num {
+      grid-row: span 2;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 44px; border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+      font-size: 17px; font-weight: 650; line-height: 1;
+    }
+    .day-option .num small {
+      font-size: 9px; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
+    }
+    .day-option[aria-selected="true"] .num { border-color: var(--accent); color: var(--accent); }
+    .day-option .name { font-weight: 600; font-size: 13px; }
+    .day-option .name .tag { color: var(--accent); font-weight: 600; margin-left: 4px; }
+    .day-option .snippet {
+      color: var(--muted); font-size: 12px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .day-empty { padding: 14px 10px; color: var(--muted); font-size: 13px; }
+
+    .notes-meta {
+      margin-left: auto; margin-bottom: 3px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    }
+    .to-today {
+      padding: 3px 10px; font-size: 12px; font-weight: 600;
+      color: var(--accent); background: var(--accent-soft); border-color: transparent;
+      border-radius: 999px;
+    }
+    .to-today[hidden] { display: none; }
+    .to-today:hover { background: var(--accent-soft); border-color: var(--accent); }
+    .notes textarea.past { color: var(--muted); }
+
+    .save-state {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--faint); font-size: 12px; white-space: nowrap;
+    }
+    .save-state::before {
+      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor; opacity: 0;
+    }
+    .save-state[data-state="editing"] { color: var(--muted); }
+    .save-state[data-state="saved"] { color: var(--muted); }
+    .save-state[data-state="saved"]::before { background: var(--good); opacity: 1; }
+    .save-state[data-state="error"] { color: var(--bad); }
+    .save-state[data-state="error"]::before { opacity: 1; }
+    .notes textarea {
+      flex: 1; min-height: 0; width: 100%; resize: none;
+      /* a bare writing surface: no box, the text starts on the heading's left edge */
+      padding: 0; border: 0; border-radius: 0;
+      background: transparent;
+      font: 15px/1.7 var(--font);
+      tab-size: 4;
+      caret-color: var(--accent);
+      cursor: text;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .notes textarea::placeholder { color: var(--faint); }
+    .notes textarea:focus-visible { outline: none; }
+    .notes-foot {
+      margin-top: 16px; color: var(--faint); font-size: 12px;
+    }
+
+    /* ---------- recent AI sessions (top of the right column) ---------- */
+    .sessions { padding: var(--page) var(--page) 0 calc(var(--col-gap) / 2); }
+    .sessions-head {
+      display: flex; align-items: center; gap: 12px;
+      min-height: 30px; margin-bottom: 6px; /* titles removed: just the label + controls */
+    }
+    .sessions-head h2 {
+      margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650; letter-spacing: -.01em;
+    }
+    .sessions-head .status { margin-left: auto; padding-bottom: 1px; }
+    .sessions-head .icon-btn { margin-left: -8px; margin-bottom: -2px; }
+    /* the last icon's glyph (not its hit area) sits on the column's right edge */
+    .sessions-head .icon-btn:last-child, .toolbar > a.icon-btn { margin-right: -7px; }
+    .sessions-head .icon-btn.spinning svg { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sessions-list {
+      list-style: none; padding: 0;
+      margin: 0 calc(-1 * var(--inset));
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .sessions-list:empty { display: none; }
+    .session {
+      display: grid;
+      grid-template-columns: var(--lead) minmax(0, 1fr) auto;
+      align-items: center; gap: 16px;
+      width: 100%; padding: 8px var(--inset);
+      background: transparent; border: 0; border-radius: var(--radius-sm);
+      text-align: left; cursor: pointer;
+    }
+    .session:hover { background: var(--hover); }
+    .tool {
+      display: inline-flex; align-items: center; gap: 12px;
+      font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap;
+    }
+    .tool::before {
+      content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--tool, var(--faint));
+    }
+    .tool[data-tool="claude-code"]    { --tool: #d97757; }
+    .tool[data-tool="claude-desktop"] { --tool: #b8a4ff; }
+    .tool[data-tool="codex"]          { --tool: #10a37f; }
+    .tool[data-tool="cursor-cli"]     { --tool: #6aa6ff; }
+    .tool[data-tool="cursor-app"]     { --tool: #6aa6ff; }
+    /* title gets the full middle; prompt + folder sit on a second, quieter line */
+    .session .what { min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.35; }
+    .session .what b, .session .what .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session .what b { font-weight: 600; }
+    .session .what .sub { font-size: 12px; color: var(--muted); }
+    .session .what .sub:empty { display: none; }
+    .session .where { font: 11px var(--mono); color: var(--faint); }
+    .session .when { font-size: 12px; color: var(--faint); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .session:hover .when .ago { display: none; }
+    .session .when .hint { display: none; color: var(--accent); font-weight: 600; }
+    .session:hover .when .hint { display: inline; }
+    .sessions-empty {
+      padding: 8px 0; color: var(--muted); font-size: 13px; max-width: 60ch;
+    }
+    .sessions-empty[hidden] { display: none; }
+    .sessions-empty code { border: 0; padding: 1px 5px; }
+
+    /* ---------- main area: two independent columns ----------
+       .work = recent AI sessions above dev servers; .side = trams, outside, health.
+       Nothing is sized across columns: each one is just as tall as its own content. */
+    .top-row {
+      display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 32%, 420px);
+      gap: var(--seg-gap);
+      padding: var(--page) var(--page) 0 calc(var(--col-gap) / 2);
+      align-items: start;
+    }
+    .top-row > .work { min-width: 0; container-type: inline-size; }
+    /* tight work column: drop the dev servers' folder path before truncating titles */
+    @container (max-width: 620px) { .grid.list .info .where { display: none; } }
+    .top-row .sessions, .top-row .trams, .top-row .outside, .top-row .health {
+      padding: 0; min-width: 0; display: flex; flex-direction: column;
+    }
+    /* right column: three segments stacked, each keeps its own height
+       (trams: a fixed 5-row scrolling window, height set by trams.js) */
+    .top-row > .side { min-width: 0; display: flex; flex-direction: column; gap: var(--side-gap); }
+    .side > section { flex: none; }
+    .top-row .sessions-list:not(:empty) + .sessions-empty { flex: none; margin-top: 8px; }
+    .tram {
+      display: grid; grid-template-columns: 34px minmax(0, 1fr) auto;
+      align-items: center; gap: 12px; padding: 4px var(--inset); font-size: 13px;
+      border-radius: var(--radius-sm);
+    }
+    .tram { cursor: pointer; }
+    .tram:hover { background: var(--hover); }
+    .tram:hover .what b { color: var(--accent); }
+    .tram:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .tram .line {
+      justify-self: start; min-width: 30px; padding: 1px 4px; border-radius: 3px;
+      background: #be1414; color: #fff; text-align: center;
+      font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    .tram .what { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+    .tram .what b, .tram .what span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tram .what b { font-weight: 500; }
+    .tram .when { text-align: right; white-space: nowrap; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .tram .when .at { margin-right: 8px; }
+    .tram .when .in { color: var(--muted); font-weight: 400; }
+    .tram .delay { margin-left: 4px; font-size: 11px; font-weight: 600; }
+    .tram .delay.late { color: var(--bad); }
+    /* narrow column: keep "Trams nearby" on one line, let the status shrink/truncate */
+    .trams .sessions-head > div:first-child { flex: none; }
+    .trams .sessions-head h2, .trams .sessions-head .eyebrow { white-space: nowrap; }
+    .trams .sessions-head .status {
+      min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis;
+    }
+    .trams .sessions-head .icon-btn { flex: none; }
+    /* tight column: drop the status and the clock time rather than truncate everything */
+    .trams { container-type: inline-size; }
+    @container (max-width: 300px) {
+      .sessions-head .status, .tram .when .at { display: none; }
+      .sessions-head .icon-btn:first-of-type { margin-left: auto; }
+    }
+    /* trams list: a scrolling window over its own rows */
+    .top-row .trams-list {
+      flex: none; overflow-y: auto; overscroll-behavior: contain;
+      scrollbar-width: thin; scrollbar-color: var(--border-strong, var(--faint)) transparent;
+      /* soft fade at the bottom hints there's more to scroll */
+      mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+    }
+    .top-row .trams-list.at-end { mask-image: none; }
+    .trams-list li[hidden] { display: none; }
+    .tram-ask-msg { margin-bottom: 10px; }
+    .tram-ask { display: flex; gap: 8px; }
+    .tram-ask { flex-wrap: wrap; }
+    .tram-ask input { flex: 1; min-width: 0; padding: 8px 10px; }
+    /* wide windows: the right column is exactly one screen tall; trams take whatever
+       height Outside + Health leave, showing as many departures as fit (trams.js) */
+    @media (min-width: 1241px) {
+      .top-row > .side { height: calc(100vh - 2 * var(--page)); }
+      .side > .trams { flex: 1 1 0; min-height: 120px; }
+      .top-row .trams-list { flex: 1 1 0; min-height: 0; }
+    }
+    /* medium windows: the right column moves under sessions + dev servers and lays
+       its segments out side by side (trams | outside, health across both) */
+    @media (max-width: 1240px) {
+      .top-row { grid-template-columns: minmax(0, 1fr); }
+      .top-row > .side {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--side-gap) var(--seg-gap); align-items: start;
+      }
+      .side > .health { grid-column: 1 / -1; }
+    }
+    /* narrower still: one segment per row again (two would squeeze the rain chart) */
+    @media (max-width: 1000px) {
+      .top-row > .side { display: flex; align-items: stretch; }
+    }
+
+    /* ---------- outside: sun curve + rain / UV / air rows (below the trams) ---------- */
+    :root { --sun: #f2b84b; --rain: #6aa6ff; }
+    @media (prefers-color-scheme: light) { :root { --sun: #e0900a; --rain: #2f6fe0; } }
+    .outside { container-type: inline-size; }
+    .outside .sessions-head > div:first-child { flex: none; }
+    .outside .sessions-head h2, .outside .sessions-head .eyebrow { white-space: nowrap; }
+    .outside .sessions-head .status { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+    .outside .now {
+      margin-top: 2px; color: var(--muted);
+      font-size: 13px; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums;
+    }
+    /* Sun / Rain switcher: two quiet text tabs, right-aligned above the chart */
+    .out-view { display: flex; justify-content: flex-end; gap: 2px; margin: -14px 0 0; position: relative; z-index: 1; }
+    .out-view button {
+      padding: 1px 7px; border: 0; border-radius: 999px; background: transparent;
+      color: var(--faint); font-size: 11px; font-weight: 500; line-height: 18px; cursor: pointer;
+    }
+    .out-view button:hover { color: var(--text); }
+    .out-view button[aria-selected="true"] { background: var(--hover); color: var(--text); }
+    .out-view button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* Sun and Rain views share one 76px slot so switching doesn't move the rows below */
+    .sun { position: relative; height: 80px; margin-top: -4px; }
+    .sun[hidden], .rain-chart[hidden] { display: none; }
+    /* hourly chance of precipitation, next 8 hours */
+    .rain-chart {
+      /* 8 hours fill the width; later hours sit to the right — scroll sideways */
+      display: grid; grid-auto-flow: column; gap: 6px;
+      grid-auto-columns: calc((100% - 7 * 6px) / 8);
+      height: 76px; margin-top: 0; align-items: end;
+      overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+      scroll-snap-type: x mandatory; scrollbar-width: none;
+      mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+    }
+    .rain-chart::-webkit-scrollbar { display: none; }
+    .rain-chart .h { scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+    .rain-chart .pct { font-size: 10px; line-height: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .rain-chart .h.wet .pct { color: var(--rain); font-weight: 600; }
+    .rain-chart .track {
+      flex: 1; width: 100%; max-width: 22px; min-height: 0; margin-bottom: 3px;
+      display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+    }
+    .rain-chart .pct { margin-bottom: 2px; }
+    /* cloud cover per hour: a meteorological cloud circle (filled share = share of sky
+       covered; empty = clear, full = overcast) plus the exact % */
+    .rain-chart .cc {
+      display: inline-flex; align-items: center; gap: 3px; margin-top: 1px;
+      font-size: 10px; line-height: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .rain-chart .cc i {
+      width: 8px; height: 8px; border-radius: 50%; flex: none;
+      box-shadow: inset 0 0 0 1px var(--muted);
+      background: conic-gradient(var(--muted) calc(var(--c) * 1%), transparent 0);
+    }
+    .rain-chart .bar { width: 100%; min-height: 2px; border-radius: 2px 2px 1px 1px; background: var(--rain); }
+    .rain-chart .h:not(.wet) .bar { background: var(--border-strong, var(--faint)); }
+    .rain-chart .t { font-size: 10px; line-height: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
+    .rain-chart .h.now .t { color: var(--text); font-weight: 600; }
+    .rain-chart .h.day .t { color: var(--text); font-weight: 600; }
+    .rain-chart .none { width: max-content; align-self: center; color: var(--faint); font-size: 12px; }
+    .sun svg { display: block; overflow: visible; }
+    .sun-horizon { stroke: var(--border); stroke-width: 1; }
+    .sun-day, .sun-night { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .sun-day { stroke: var(--sun); stroke-width: 1.75; }
+    .sun-night { stroke: var(--faint); stroke-width: 1.25; opacity: .7; } /* solid: one continuous path through the night */
+    .sun-tick { fill: var(--bg); stroke: var(--sun); stroke-width: 1.25; }
+    .sun-halo { fill: var(--sun); opacity: .18; }
+    .sun-dot { fill: var(--sun); }
+    .sun-dot.below { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
+    .sun-times { position: relative; height: 16px; margin-top: 2px; }
+    .sun-times span {
+      position: absolute; top: 0; white-space: nowrap;
+      color: var(--muted); font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums;
+    }
+    .sun-times .len { color: var(--faint); }
+    .sun-times span[hidden] { display: none; }
+    .outside-list { margin-top: 2px; }
+    .out-row {
+      display: grid; grid-template-columns: 34px auto minmax(0, 1fr) auto;
+      align-items: center; gap: 12px; padding: 3px var(--inset); font-size: 13px; line-height: 1.5;
+      border-radius: var(--radius-sm);
+    }
+    .out-row .k { color: var(--muted); font-size: 12px; }
+    .out-row .v { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .out-row .v.none { color: var(--faint); font-weight: 400; }
+    .out-row .v .dot {
+      display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%;
+      vertical-align: 0; box-shadow: none;
+    }
+    .out-row.wet .v { color: var(--rain); }
+    .out-row .d {
+      min-width: 0; text-align: right; color: var(--muted); font-size: 12px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;
+    }
+    .rain-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
+    .rain-bars i { width: 3px; border-radius: 1px; background: var(--border-strong); }
+    .rain-bars i.wet { background: var(--rain); }
+    @container (max-width: 300px) {
+      .rain-bars, .out-row .more, .outside .sessions-head .status { display: none; }
+      .out-row { gap: 8px; }
+    }
+
+    /* ---------- health: last night + 7-day sleep / HRV / resting HR (below outside) ---------- */
+    :root { --sleep: #9b8cff; --hrv: #4cc9b4; --rhr: #f0879a; --rem: #5cc3ee; }
+    @media (prefers-color-scheme: light) { :root { --sleep: #6a55e0; --hrv: #11917f; --rhr: #d4446a; --rem: #1c8fc9; } }
+    .health { container-type: inline-size; }
+    .health .sessions-head > div:first-child { flex: none; }
+    .health .sessions-head .eyebrow { white-space: nowrap; }
+    .health .sessions-head .status { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+    .health-body { display: flex; flex-direction: column; gap: 12px; }
+    .health-body[hidden] { display: none; }
+    /* last night: the one headline number, bed -> wake on the right, stages underneath */
+    .hl-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+    .hl-total {
+      color: var(--muted); font-size: 13px; line-height: 28px; white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .hl-total b { color: var(--text); font-size: 24px; font-weight: 650; letter-spacing: -.01em; }
+    .hl-total.none { color: var(--faint); }
+    .hl-when {
+      display: flex; flex-direction: column; align-items: flex-end; min-width: 0;
+      padding-bottom: 3px; font-size: 12px; line-height: 16px; white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .hl-when .lbl { color: var(--faint); font-size: 11px; }
+    .hl-when .span { color: var(--muted); }
+    .hl-stages { display: flex; gap: 2px; height: 6px; margin-top: 6px; }
+    .hl-stages i { min-width: 2px; border-radius: 2px; }
+    .hl-stages .deep, .hl-legend .deep { background: var(--sleep); }
+    .hl-stages .light, .hl-legend .light { background: color-mix(in srgb, var(--sleep) 42%, var(--bg)); }
+    .hl-stages .rem, .hl-legend .rem { background: var(--rem); }
+    .hl-stages .awake, .hl-legend .awake { background: var(--sun); }
+    .hl-legend {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; margin-top: 8px;
+      color: var(--muted); font-size: 11px; line-height: 16px; white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .hl-legend i { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; }
+    .hl-legend b { margin-left: 2px; color: var(--text); font-weight: 500; }
+    /* trends: label · value · chart, the three charts share one 7-day x axis */
+    .hl-trends { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .hl-row {
+      display: grid; grid-template-columns: 34px 62px minmax(0, 1fr);
+      align-items: center; gap: 12px; font-size: 13px;
+    }
+    .hl-row .k { color: var(--muted); font-size: 12px; }
+    .hl-row .vv { display: flex; flex-direction: column; line-height: 1.3; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .hl-row .v { font-weight: 600; }
+    .hl-row .v.none { color: var(--faint); font-weight: 400; }
+    .hl-row .s { color: var(--faint); font-size: 11px; }
+    .hl-chart { height: 28px; min-width: 0; }
+    .hl-chart svg { display: block; overflow: visible; }
+    .hl-chart-empty { color: var(--faint); font-size: 12px; line-height: 28px; }
+    .hl-row[data-metric="sleep"] { --m: var(--sleep); }
+    .hl-row[data-metric="hrv"] { --m: var(--hrv); }
+    .hl-row[data-metric="rhr"] { --m: var(--rhr); }
+    .hl-zone { fill: transparent; }
+    .hl-days span.on { color: var(--text); font-weight: 600; }
+    .hl-trends.hovering .hl-row .s { color: var(--text); }
+    .hl-marks { pointer-events: none; }
+    .hl-avg { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+    .hl-bar { fill: var(--m); opacity: .42; }
+    .hl-bar.last { opacity: 1; }
+    .hl-line { fill: none; stroke: var(--m); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+    .hl-dot { fill: var(--bg); stroke: var(--m); stroke-width: 1.25; }
+    .hl-dot.last { fill: var(--m); stroke: none; }
+    .hl-halo { fill: var(--m); opacity: .18; }
+    .hl-axis { margin-top: 2px; }
+    .hl-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; }
+    .hl-days span { color: var(--faint); font-size: 10px; line-height: 13px; }
+    .hl-days .today { color: var(--text); font-weight: 600; }
+    .hl-row[data-metric="cardio"] { --m: #f08a3c; }
+
+    .health .sessions-empty code {
+      display: block; width: fit-content; max-width: 100%; margin-top: 4px;
+      user-select: all; font-size: 11px; overflow-wrap: anywhere;
+    }
+    .health .sessions-empty { font-size: 12px; line-height: 1.6; }
+    .health-body:not([hidden]) + .sessions-empty { margin-top: 8px; padding: 0; }
+    /* wide (the column sits under the others): night on the left, trends on the right */
+    @container (min-width: 500px) {
+      .health-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--seg-gap); align-items: start; }
+    }
+    /* narrow column (or half of the wide layout): stage names over their durations,
+       four across, instead of wrapping */
+    @container (max-width: 345px) or ((min-width: 500px) and (max-width: 760px)) {
+      .hl-legend { display: grid; grid-template-columns: repeat(4, auto); }
+      .hl-legend span { display: grid; grid-template-columns: auto 1fr; align-items: center; }
+      .hl-legend b { grid-column: 2; margin-left: 0; }
+    }
+    @container (max-width: 300px) {
+      .health .sessions-head .status { display: none; }
+      .health .sessions-head .icon-btn { margin-left: auto; }
+    }
+
+    /* ---------- dev servers toolbar (under recent sessions, in the work column) ---------- */
+    .toolbar {
+      position: relative;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      margin-top: var(--seg-gap);
+      padding: 0 0 var(--head-gap);
+    }
+    .toolbar { align-items: flex-end; }
+    .toolbar-title { margin-right: 4px; }
+    .toolbar-title .title-row { display: flex; align-items: baseline; gap: 16px; }
+    .toolbar .status { padding-bottom: 1px; }
+    .toolbar .toggle, .toolbar button, .toolbar .icon-btn { margin-bottom: -2px; }
+    /* Rescan is a quiet text button here — the accent is saved for links and state */
+    .toolbar button.primary {
+      height: 32px; padding: 0 10px;
+      background: transparent; border-color: transparent;
+      color: var(--muted); font-size: 13px; font-weight: 500;
+    }
+    .toolbar button.primary:hover { background: var(--hover); color: var(--text); filter: none; }
+    .eyebrow {
+      display: block;
+      color: var(--faint); font-size: 11px; line-height: 16px; font-weight: 600;
+      letter-spacing: .08em; text-transform: uppercase;
+    }
+    .toolbar h1 {
+      margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650;
+      letter-spacing: -.01em;
+    }
+    .count {
+      color: var(--muted); font-size: 12px; font-weight: 500;
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .count::before {
+      content: ""; display: inline-block; vertical-align: 1px; margin-right: 8px;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--faint);
+    }
+    .count.live::before { background: var(--good); }
+    .status {
+      color: var(--faint); font-size: 12px;
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .spacer { flex: 1; }
+
+    /* auto-refresh as a switch */
+    .toggle {
+      display: inline-flex; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 13px; cursor: pointer; user-select: none;
+      height: 32px; padding: 0 4px;
+    }
+    .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .toggle .switch {
+      position: relative; width: 30px; height: 18px; flex: none;
+      border-radius: 999px; background: var(--surface-3);
+      border: 1px solid transparent;
+      transition: background-color .15s, border-color .15s;
+    }
+    .toggle .switch::after {
+      content: ""; position: absolute; top: 2px; left: 2px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--muted);
+      transition: transform .15s, background-color .15s;
+    }
+    .toggle input:checked + .switch { background: var(--accent); border-color: var(--accent); }
+    .toggle input:checked + .switch::after { transform: translateX(12px); background: var(--accent-ink); }
+    .toggle input:checked ~ .label { color: var(--text); }
+    .toggle input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; padding: 0; flex: none;
+      color: var(--faint);
+      background: transparent; border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      text-decoration: none;
+      transition: background-color .12s, color .12s;
+    }
+    .icon-btn:hover { color: var(--text); background: var(--hover); border-color: transparent; }
+    .icon-btn svg { width: 16px; height: 16px; }
+
+    #scan[aria-busy="true"] svg { animation: spin .9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* thin scan-progress line along the toolbar's bottom edge */
+    .progress {
+      position: absolute; left: 0; right: 0; bottom: 4px; height: 1px;
+      overflow: hidden;
+      background: transparent;
+      opacity: 0; transition: opacity .3s;
+    }
+    .progress.active { opacity: 1; }
+    .progress .bar {
+      height: 100%; width: 0; background: var(--accent);
+      transition: width .15s linear;
+    }
+
+    /* ---------- port grid ---------- */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 16px;
-      padding: 20px;
     }
+    .grid:empty { display: none; }
     .card {
-      background: var(--panel);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
       overflow: hidden;
       display: flex; flex-direction: column;
+      transition: border-color .12s, opacity .2s;
+      animation: card-in .2s ease-out;
     }
+    @keyframes card-in { from { opacity: 0; transform: translateY(4px); } }
+    .card:hover { border-color: var(--border-strong); }
+    .card.killing { opacity: .45; pointer-events: none; }
     .card-head {
       display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
+      padding: 8px 8px 8px 4px;
       cursor: pointer;
     }
-    .card-head:hover .title { color: var(--accent); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-    .dot.up { background: var(--good); }
-    .dot.down { background: var(--bad); }
-    .port { font-weight: 600; }
-    .title { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .card-head .copy { margin-left: auto; padding: 4px 12px; font-size: 24px; line-height: 1; background: var(--panel-2); }
-    .card-head .copy.copied { color: var(--good); border-color: var(--good); }
-    .card-head .kill { padding: 4px 14px; font-size: 24px; line-height: 1; background: var(--panel-2); color: var(--bad); }
-    .card-head .kill:hover { background: var(--bad); color: #fff; }
-    .card.killing { opacity: .5; pointer-events: none; }
-    .card-head a { color: var(--accent); text-decoration: none; font-size: 12px; flex: none; }
+    /* The whole left side is a real link: click opens in this tab,
+       Cmd/Ctrl-click or middle-click opens a new tab. */
+    .card-head .open {
+      flex: 1; min-width: 0;
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 8px; border-radius: var(--radius-sm);
+      color: inherit; text-decoration: none;
+    }
+    .card-head .open:hover { background: var(--surface-2); }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex: none;
+      background: var(--good);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent);
+    }
+    .ident { display: flex; flex-direction: column; min-width: 0; }
+    .port {
+      font: 600 16px/1.3 var(--mono);
+      letter-spacing: -.01em;
+    }
+    .port .host { color: var(--faint); font-weight: 400; font-size: 13px; }
+    .title {
+      color: var(--muted); font-size: 13px; line-height: 1.35;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .title.pending { color: var(--faint); font-style: italic; }
+    .open .go {
+      margin-left: auto; flex: none; width: 16px; height: 16px;
+      color: var(--faint); opacity: 0;
+      transition: opacity .12s, transform .12s, color .12s;
+    }
+    .card-head:hover .go, .open:focus-visible .go { opacity: 1; color: var(--accent); transform: translate(1px, -1px); }
+    .card-head:hover .port { color: var(--accent); }
+    .actions { display: flex; gap: 6px; flex: none; }
+    .copy.copied { color: var(--good); border-color: var(--good); }
+    .kill:hover { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
+
     .preview {
       position: relative;
       aspect-ratio: 16 / 10;
-      background: var(--panel-2);
+      background: var(--surface-2);
+      border-top: 1px solid var(--border);
+      overflow: hidden;
     }
     .preview iframe {
       position: absolute; top: 0; left: 0;
@@ -91,26 +675,316 @@
     }
     .preview .overlay {
       position: absolute; inset: 0;
-      display: flex; align-items: center; justify-content: center;
+      display: flex; flex-direction: column; gap: 4px;
+      align-items: center; justify-content: center;
       text-align: center; padding: 16px;
+      background: var(--surface-2);
       color: var(--muted); font-size: 13px;
     }
+    .preview .overlay small { color: var(--faint); font-size: 12px; }
     .preview .overlay[hidden] { display: none; }
-    .empty { color: var(--muted); padding: 40px 20px; text-align: center; }
+
+    /* ---------- light info block (replaces live previews by default) ---------- */
+    .info {
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 10px 14px 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px; min-width: 0;
+    }
+    .info-top { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+    .info .fav { width: 16px; height: 16px; object-fit: contain; flex: none; }
+    .info .fav[hidden], .info [hidden] { display: none; }
+    .chip {
+      padding: 1px 8px; border-radius: 999px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap;
+    }
+    .info .proc { color: var(--faint); font: 11px var(--mono); margin-left: auto; }
+    .info .desc {
+      color: var(--muted); line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .info .where, .info .cmd {
+      font: 12px var(--mono); color: var(--faint);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .info .where { color: var(--muted); }
+    .info .cmd { background: none; padding: 0; }
+    .info .cmd::before { content: "$ "; opacity: .6; }
+
+    /* ---------- compact list (default, when live previews are off) ----------
+       One row per server: port · favicon + title · framework · folder · actions.
+       The card markup is reused; .card-head is flattened so its parts become row cells. */
+    .grid.list {
+      display: flex; flex-direction: column; gap: 2px;
+      margin: 0 calc(-1 * var(--inset));
+    }
+    .grid.list .card {
+      display: flex; flex-direction: row; align-items: center; gap: 12px;
+      position: relative; padding: 0 var(--inset) 0 0;
+      background: transparent; border: 0; box-shadow: none; border-radius: var(--radius-sm);
+      overflow: visible;
+    }
+    .grid.list .card:hover, .grid.list .card:focus-within { background: var(--hover); }
+    .grid.list .card-head { display: contents; }
+    .grid.list .open { flex: 1; padding: 8px var(--inset); gap: 12px; }
+    .grid.list .open:hover { background: transparent; }
+    .grid.list .ident { flex-direction: row; align-items: baseline; gap: 16px; min-width: 0; }
+    /* dot (8) + gap (12) + port = --lead, so titles line up with the sessions list above */
+    .grid.list .port { font-size: 13px; width: calc(var(--lead) - 20px); flex: none; }
+    .grid.list .port .host { font-size: 12px; }
+    .grid.list .title { color: var(--text); font-size: 14px; font-weight: 600; }
+    .grid.list .title.pending { color: var(--faint); font-weight: 400; }
+    .grid.list .go { display: none; }
+    .grid.list .dot { width: 8px; height: 8px; box-shadow: none; }
+    .grid.list .info {
+      order: 1; flex: 0 1 auto; flex-direction: row; align-items: center; gap: 12px;
+      padding: 0; border: 0; min-width: 0;
+    }
+    .grid.list .info-top { min-height: 0; gap: 8px; }
+    .grid.list .info .desc, .grid.list .info .cmd, .grid.list .info .proc { display: none; }
+    .grid.list .info .where { font-size: 11px; color: var(--faint); max-width: 240px; }
+    /* framework as plain text, not a pill */
+    .grid.list .chip {
+      padding: 0; background: none; border: 0; border-radius: 0;
+      font-size: 12px; font-weight: 500; color: var(--muted);
+    }
+    /* actions float over the row's right end on hover, so resting rows keep a clean right edge */
+    .grid.list .actions {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      gap: 0; padding-left: 12px;
+      background: linear-gradient(to right, transparent, var(--hover) 12px);
+      opacity: 0; pointer-events: none; transition: opacity .12s;
+    }
+    .grid.list .card:hover .actions, .grid.list .card:focus-within .actions { opacity: 1; pointer-events: auto; }
+    .grid.list .actions .icon-btn { width: 28px; height: 28px; }
+    .grid.list .actions .icon-btn svg { width: 14px; height: 14px; }
+    .grid.list .actions .icon-btn:hover { background: var(--surface-3); }
+    .grid.list .actions .kill:hover { background: var(--bad-soft); }
+    /* favicon sits before the title instead of in the info block */
+    .grid.list .fav { order: -1; }
+    @media (max-width: 800px) {
+      .grid.list .info .where { display: none; }
+      .grid.list .card { padding-right: 4px; }
+      .grid.list .actions {
+        position: static; transform: none; order: 2; padding: 0; background: none;
+        opacity: 1; pointer-events: auto;
+      }
+    }
+
+    /* ---------- empty / scanning state ---------- */
+    /* Unboxed and left-aligned: it reads as the first row of the (empty) list —
+       a status dot in the row-marker position, then the message. */
+    .empty {
+      display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 12px;
+      align-items: baseline;
+      padding: 8px 0;
+      color: var(--muted);
+    }
+    .empty[hidden] { display: none; }
+    .empty > * { grid-column: 2; }
+    .empty .big { color: var(--text); font-size: 14px; font-weight: 600; }
+    .empty .msg { max-width: 60ch; margin-top: 4px; font-size: 13px; }
+    .empty .msg:empty { display: none; }
+    .empty .radar {
+      grid-column: 1; grid-row: 1; align-self: center;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--faint);
+    }
+    .empty[data-state="scanning"] .radar { background: var(--accent); animation: pulse 1.4s ease-out infinite; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 var(--accent-soft); }
+      100% { box-shadow: 0 0 0 10px transparent; }
+    }
+    .empty .empty-actions { display: flex; gap: 16px; align-items: center; margin-top: 16px; }
+    .empty[data-state="scanning"] .empty-actions { display: none; }
+    .empty .empty-actions a { color: var(--accent); text-decoration: none; font-size: 13px; }
+    .empty .empty-actions a:hover { text-decoration: underline; }
+    .empty .empty-actions button { padding: 4px 12px; font-size: 13px; }
+
+    /* ---------- toast (kill / copy feedback) ---------- */
+    .toast {
+      position: fixed; left: 50%; bottom: 20px; z-index: 20;
+      transform: translate(-50%, 12px);
+      max-width: min(560px, calc(100vw - 32px));
+      padding: 10px 16px; border-radius: 10px;
+      background: var(--text); color: var(--bg);
+      font-size: 13px; box-shadow: var(--shadow);
+      opacity: 0; pointer-events: none;
+      transition: opacity .18s, transform .18s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { background: var(--bad); color: #fff; }
+
+    /* ---------- responsive ---------- */
+    @media (max-width: 1100px) {
+      :root { --page: 32px; --col-gap: 48px; --seg-gap: 48px; }
+      .session .where { display: none; }
+    }
+    @media (max-width: 800px) {
+      /* single column: every segment shares one left/right edge (--page) */
+      :root { --page: 20px; --seg-gap: 40px; }
+      .layout { display: block; height: auto; }
+      .ports { overflow: visible; }
+      .notes { height: 42vh; min-height: 240px; padding: var(--page) var(--page) 0; }
+      .notes-head { min-height: 0; }
+      .notes-foot { display: none; }
+      .top-row { padding: var(--seg-gap) var(--page) 0; }
+      .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    }
+    @media (max-width: 480px) {
+      .toggle .label { display: none; }
+      .status { order: 10; width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>🛰️ Localhost Dashboard</h1>
-    <label class="small">Ports / ranges:</label>
-    <input id="ports" placeholder="3000-3010, 5173, 8080, 8000" />
-    <button id="scan" class="primary">Scan</button>
-    <label class="small"><input type="checkbox" id="auto" /> auto-refresh 10s</label>
-    <span class="spacer"></span>
-    <span class="status" id="status"></span>
-  </header>
-  <div id="grid" class="grid"></div>
-  <div id="empty" class="empty" hidden>No services responded. Start a dev server and hit Scan.</div>
+  <div class="layout">
+    <aside class="notes" aria-label="Notes">
+      <div class="notes-head">
+        <div class="day-picker">
+          <h2>
+            <button id="day-btn" class="day-btn" aria-haspopup="listbox" aria-expanded="false"
+                    aria-controls="day-menu" title="Notes from other days">
+              <span class="eyebrow" id="notes-weekday"></span>
+              <span class="day-title">
+                <span id="notes-date">Notes</span>
+                <svg class="chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+              </span>
+            </button>
+          </h2>
+          <div id="day-menu" class="day-menu" role="listbox" aria-label="Notes by day" hidden></div>
+        </div>
+        <div class="notes-meta">
+          <button id="to-today" class="to-today" hidden>Back to today</button>
+          <span class="save-state" id="notes-status" role="status"></span>
+        </div>
+      </div>
+      <label for="notes" class="visually-hidden" id="notes-label">Today's notes</label>
+      <textarea id="notes" spellcheck="false"
+                placeholder="What's on for today?&#10;&#10;- …"></textarea>
+      <div class="notes-foot">Autosaves · synced across tabs · <kbd>N</kbd> to jump here</div>
+    </aside>
+
+    <main class="ports">
+      <div class="top-row">
+      <div class="work">
+      <section class="sessions" aria-labelledby="sessions-title">
+        <div class="sessions-head">
+          <div>
+            <div class="eyebrow">Claude · Codex · Cursor</div>
+            <h2 id="sessions-title" class="visually-hidden">Recent sessions</h2>
+          </div>
+          <span class="status" id="sessions-status"></span>
+          <button id="sessions-refresh" class="icon-btn" title="Refresh sessions" aria-label="Refresh sessions">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <ol id="sessions-list" class="sessions-list"></ol>
+        <div id="sessions-empty" class="sessions-empty" hidden></div>
+      </section>
+
+      <div class="toolbar">
+        <div class="toolbar-title">
+          <div class="eyebrow">Dev servers</div>
+          <div class="title-row">
+            <h1 class="visually-hidden">localhost</h1>
+            <span class="count" id="count" title="Services currently responding">0 running</span>
+          </div>
+        </div>
+        <span class="status" id="status" aria-live="polite"></span>
+        <span class="spacer"></span>
+        <label class="toggle" title="Rescan every 10 seconds">
+          <input type="checkbox" id="auto" />
+          <span class="switch" aria-hidden="true"></span>
+          <span class="label">Auto-refresh</span>
+        </label>
+        <button id="scan" class="primary" title="Rescan ports (R)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          Rescan
+        </button>
+        <a class="icon-btn" href="settings.html" title="Settings — edit the port list" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        </a>
+        <div class="progress" id="progress" aria-hidden="true"><div class="bar"></div></div>
+      </div>
+
+      <div id="grid" class="grid list"></div>
+      <div id="empty" class="empty" data-state="scanning">
+        <div class="radar" aria-hidden="true"></div>
+        <div class="big" id="empty-title">Scanning localhost…</div>
+        <div class="msg" id="empty-msg"></div>
+        <div class="empty-actions">
+          <button id="empty-scan" class="primary">Rescan</button>
+          <a href="settings.html">Edit port list</a>
+        </div>
+      </div>
+      </div>
+      <div class="side">
+      <section class="trams" aria-labelledby="trams-title">
+        <div class="sessions-head">
+          <div>
+            <div class="eyebrow">BVG · Tram</div>
+            <h2 id="trams-title" class="visually-hidden">Trams nearby</h2>
+          </div>
+          <span class="status" id="trams-status"></span>
+          <button id="trams-edit" class="icon-btn" title="Change address" aria-label="Change address">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </button>
+          <button id="trams-refresh" class="icon-btn" title="Refresh trams" aria-label="Refresh trams">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <ol id="trams-list" class="sessions-list trams-list"></ol>
+        <div id="trams-empty" class="sessions-empty" hidden></div>
+      </section>
+      <section class="outside" aria-labelledby="outside-title">
+        <div class="sessions-head">
+          <div>
+            <div class="eyebrow">DWD · UBA · CAMS</div>
+            <h2 id="outside-title" class="visually-hidden">Outside</h2>
+            <div class="now" id="outside-now"></div>
+          </div>
+          <span class="status" id="outside-status"></span>
+          <button id="outside-refresh" class="icon-btn" title="Refresh weather" aria-label="Refresh weather">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <div class="out-view" role="tablist" aria-label="Outside view">
+          <button type="button" role="tab" data-view="sun" aria-selected="true">Sun</button>
+          <button type="button" role="tab" data-view="rain" aria-selected="false" title="Chance of rain (bars) and cloud cover (grey) by hour">Rain · Clouds</button>
+        </div>
+        <div id="outside-sun" class="sun" role="img"></div>
+        <div id="outside-rain" class="rain-chart" role="img" hidden></div>
+        <ul id="outside-list" class="sessions-list outside-list"></ul>
+      </section>
+      <section class="health" aria-labelledby="health-title">
+        <div class="sessions-head">
+          <div>
+            <div class="eyebrow">Fitbit · Google Health</div>
+            <h2 id="health-title" class="visually-hidden">Health</h2>
+          </div>
+          <span class="status" id="health-status"></span>
+          <button id="health-refresh" class="icon-btn" title="Refresh health data" aria-label="Refresh health data">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <div id="health-body" class="health-body" hidden></div>
+        <div id="health-note" class="sessions-empty" hidden></div>
+      </section>
+      </div>
+      </div>
+
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="notes.js"></script>
   <script src="dashboard.js"></script>
+  <script src="recent.js"></script>
+  <script src="trams.js"></script>
+  <script src="weather.js"></script>
+  <script src="health.js"></script>
 </body>
 </html>
