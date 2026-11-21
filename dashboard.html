@@ -31,6 +31,28 @@
     }
     .ports { overflow-y: auto; min-width: 0; padding-bottom: var(--page); }
 
+    /* ---------- focus mode: typing a note widens the notes column ----------
+       The column eases open, the rest of the page steps back (dims, desaturates) and an
+       accent line draws itself down the notes' edge. Hovering the right side brings it back. */
+    @media (min-width: 801px) {
+      .layout { transition: grid-template-columns .6s cubic-bezier(.22, 1, .36, 1); }
+      .ports { transition: opacity .45s ease, filter .45s ease, transform .6s cubic-bezier(.22, 1, .36, 1); }
+      .notes { position: relative; }
+      .notes::after {
+        content: ""; position: absolute; right: 0; top: 50%; width: 1px; height: 0;
+        background: linear-gradient(to bottom, transparent, var(--accent) 20%, var(--accent) 80%, transparent);
+        opacity: 0; pointer-events: none;
+        transition: top .7s cubic-bezier(.22, 1, .36, 1), height .7s cubic-bezier(.22, 1, .36, 1), opacity .3s ease;
+      }
+      .layout:has(.notes textarea:focus) { grid-template-columns: clamp(460px, 46vw, 860px) minmax(0, 1fr); }
+      .layout:has(.notes textarea:focus) .notes::after { top: 8%; height: 84%; opacity: .55; }
+      .layout:has(.notes textarea:focus) .ports { opacity: .38; filter: saturate(.35); transform: translateX(6px); }
+      .layout:has(.notes textarea:focus) .ports:hover { opacity: 1; filter: none; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .layout, .ports, .notes::after { transition: none !important; }
+    }
+
     /* ---------- notes ---------- */
     .notes {
       display: flex; flex-direction: column;
