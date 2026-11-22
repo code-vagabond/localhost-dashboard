@@ -11,7 +11,8 @@ A Chrome extension that scans your localhost ports and shows a **live desktop pr
 - **Trams nearby** — next BVG tram departures from the closest stops (current location, or a stop/address set with the ✎ button or in Settings).
 - **Health** — last night's sleep (total, bed/wake, stages) and 7-day sleep / HRV / resting-HR trends from Fitbit / Google Health, read through the native host (`native/health.js`, needs the health-agent CLI at `~/code/health-agent`). Cached; refreshes when older than 30 minutes.
 - **Click to open** — click a card's header bar to open that app in the current tab.
-- **Daily notes** — a plain-text note per day (left panel). A fresh note opens automatically each new day; click the date to open past days. Autosaved and synced across tabs.
+- **Daily notes** — a note per day (left panel). A fresh note opens automatically each new day; step between days with ‹ › or click the date to pick one. Pasted links become chips with the page title (Backspace removes the whole link). Autosaved and synced across tabs.
+- **Notes as files** — with the native host installed, every non-empty note is also mirrored to `~/notes/YYYY-MM-DD.md` (links as `[Title](url)`), so other tools — e.g. Claude Code — can read them. Written on autosave, on blur / tab hide, and re-synced on each new tab; clearing a note deletes its file. One-way: edits to the files aren't read back.
 - **Recent sessions** — the 7 latest sessions from Claude Code, Claude Desktop (Code tab + Cowork), Codex, Cursor CLI and the Cursor app, with title, first prompt, project and time. Click a row to copy its resume command (`claude --resume …`, `codex resume …`, `cursor-agent --resume …`) and bring Ghostty to the front, ready to paste; Claude Desktop / Cursor rows copy the prompt and bring that app forward. Read from local history files by the native host *(regular Claude Desktop chats live in the cloud and aren't included)*. Run `node native/sessions.js` to see what it finds.
 - **⏻ Kill port** — terminate the process listening on a port, straight from the dashboard *(requires the one-time native host setup below)*.
 
@@ -112,7 +113,7 @@ localhost-dashboard/
 ├── recent.js              # Recent AI sessions list (cached, refreshed on tab focus)
 ├── background.js          # Service worker: routes kill + sessions requests to the native host
 ├── native/
-│   ├── kill_port.js       # Native messaging host — kill ports, answer sessions requests
+│   ├── kill_port.js       # Native messaging host — kill ports, sessions, link titles, note files
 │   ├── sessions.js        # Reads Claude/Codex/Cursor session history from local files
 │   ├── install.sh         # Registers the host with Chrome + Edge (run once)
 │   └── run.sh             # Auto-generated launcher (absolute node path)
@@ -134,4 +135,5 @@ For Chromium, Brave, or Linux/Windows, the host JSON is identical but the direct
 ## Security notes
 
 - The native host only accepts messages from **your** extension ID (`allowed_origins`) and only acts on a `port` number → `lsof` → `kill`. It runs locally with your user permissions.
-- Everything stays on your machine; no network calls leave localhost.
+- The native host also fetches the title of links you paste into notes, and writes notes only into `~/notes/` (date-named files only).
+- No data is sent anywhere else: outside of public transit / weather / air-quality APIs and pasted-link titles, everything stays on your machine.

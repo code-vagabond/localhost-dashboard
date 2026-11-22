@@ -44,10 +44,10 @@
         opacity: 0; pointer-events: none;
         transition: top .7s cubic-bezier(.22, 1, .36, 1), height .7s cubic-bezier(.22, 1, .36, 1), opacity .3s ease;
       }
-      .layout:has(.notes textarea:focus) { grid-template-columns: clamp(460px, 46vw, 860px) minmax(0, 1fr); }
-      .layout:has(.notes textarea:focus) .notes::after { top: 8%; height: 84%; opacity: .55; }
-      .layout:has(.notes textarea:focus) .ports { opacity: .38; filter: saturate(.35); transform: translateX(6px); }
-      .layout:has(.notes textarea:focus) .ports:hover { opacity: 1; filter: none; transform: none; }
+      .layout:has(#notes:focus) { grid-template-columns: clamp(460px, 46vw, 860px) minmax(0, 1fr); }
+      .layout:has(#notes:focus) .notes::after { top: 8%; height: 84%; opacity: .55; }
+      .layout:has(#notes:focus) .ports { opacity: .38; filter: saturate(.35); transform: translateX(6px); }
+      .layout:has(#notes:focus) .ports:hover { opacity: 1; filter: none; transform: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .layout, .ports, .notes::after { transition: none !important; }
@@ -63,6 +63,9 @@
       display: flex; align-items: flex-end; gap: 12px;
       min-height: 56px;
       margin-bottom: var(--head-gap);
+      /* sized by the column, so the controls can tighten up when it is narrow; the
+         containment makes a stacking context, so lift it to keep the day menu on top */
+      container-type: inline-size; position: relative; z-index: 2;
     }
     .notes-head h2 {
       margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650;
@@ -86,6 +89,7 @@
     }
     .day-btn:hover .chevron { color: var(--text); }
     .day-btn[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+    .day-btn .eyebrow { white-space: nowrap; }
     .day-btn.past .eyebrow { color: var(--accent); }
 
     .day-menu {
@@ -137,25 +141,45 @@
     }
     .day-empty { padding: 14px 10px; color: var(--muted); font-size: 13px; }
 
-    .notes-meta {
-      margin-left: auto; margin-bottom: 3px;
-      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    /* Right side of the heading: day controls level with the date line, save status on the
+       eyebrow line above them. The status is out of flow and the controls are right-anchored,
+       so nothing moves when "Saved…" or the Today button comes and goes. */
+    .notes-meta { position: relative; flex: none; margin-left: auto; }
+    .day-nav {
+      display: flex; align-items: center; justify-content: flex-end;
+      height: calc(22px * 1.2); /* the date's line box: the 32px buttons centre on it and overhang */
     }
+    /* ‹ › are regular .icon-btn's; the › glyph (not its hit area) ends on the column edge */
+    .day-arrow { transition: background-color .12s, color .12s, transform .15s; }
+    #day-next { margin-right: -12px; }
+    #day-prev:active:not(:disabled) { transform: translateX(-2px); }
+    #day-next:active:not(:disabled) { transform: translateX(2px); }
+    .day-arrow:disabled, .day-arrow:disabled:hover {
+      color: var(--faint); background: transparent; opacity: .35; cursor: default;
+    }
+    /* Back to today: same 32px ghost control, in the accent that marks a past day */
     .to-today {
-      padding: 3px 10px; font-size: 12px; font-weight: 600;
-      color: var(--accent); background: var(--accent-soft); border-color: transparent;
-      border-radius: 999px;
+      flex: none; height: 32px; padding: 0 8px; margin-right: 2px; gap: 6px;
+      color: var(--accent); background: transparent; border-color: transparent;
+      font-size: 13px; line-height: 16px; font-weight: 600; white-space: nowrap;
     }
     .to-today[hidden] { display: none; }
-    .to-today:hover { background: var(--accent-soft); border-color: var(--accent); }
-    .notes textarea.past { color: var(--muted); }
+    .to-today:hover { background: var(--accent-soft); border-color: transparent; }
+    .to-today svg { width: 16px; height: 16px; }
+    .notes .notes-editor.past { color: var(--muted); }
 
     .save-state {
-      display: inline-flex; align-items: center; gap: 6px;
-      color: var(--faint); font-size: 12px; white-space: nowrap;
+      position: absolute; right: 0; bottom: 100%;
+      /* never reaches into the weekday eyebrow on its left; a long error is cut short */
+      max-width: calc(100cqw - 112px);
+      overflow: hidden; text-overflow: ellipsis;
+      color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap;
     }
+    .notes-head:has(.day-btn.past) .save-state { max-width: calc(100cqw - 200px); }
+    .save-state:empty { display: none; }
     .save-state::before {
-      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      content: ""; display: inline-block; vertical-align: middle;
+      width: 6px; height: 6px; margin: -2px 6px 0 0; border-radius: 50%;
       background: currentColor; opacity: 0;
     }
     .save-state[data-state="editing"] { color: var(--muted); }
@@ -163,7 +187,19 @@
     .save-state[data-state="saved"]::before { background: var(--good); opacity: 1; }
     .save-state[data-state="error"] { color: var(--bad); }
     .save-state[data-state="error"]::before { opacity: 1; }
-    .notes textarea {
+    /* tight column: the Today button drops its label, then the heading gives up its chevron
+       and the status its text (the dot stays) while a past day needs the room */
+    @container (max-width: 319px) {
+      .to-today { width: 32px; padding: 0; margin-right: 0; }
+      .to-today .lbl { display: none; }
+      .notes-head:has(.day-btn.past) .save-state { max-width: none; font-size: 0; }
+      .notes-head:has(.day-btn.past) .save-state::before { margin: 0; vertical-align: top; margin-top: 5px; }
+    }
+    @container (max-width: 269px) {
+      .day-btn.past .chevron { display: none; }
+    }
+    .notes .notes-editor {
+      position: relative; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; outline: none;
       flex: 1; min-height: 0; width: 100%; resize: none;
       /* a bare writing surface: no box, the text starts on the heading's left edge */
       padding: 0; border: 0; border-radius: 0;
@@ -174,8 +210,36 @@
       cursor: text;
       scrollbar-width: thin; scrollbar-color: var(--border) transparent;
     }
-    .notes textarea::placeholder { color: var(--faint); }
-    .notes textarea:focus-visible { outline: none; }
+    /* placeholder lives beside the editor (not inside it) so the caret sits at the start */
+    .notes-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .notes-ph {
+      position: absolute; inset: 0 0 auto 0; pointer-events: none;
+      color: var(--faint); font: 15px/1.7 var(--font); white-space: pre-wrap;
+    }
+    .notes-ph[hidden] { display: none; }
+    .notes-wrap:has(#notes:focus) .notes-ph { display: none; } /* placeholder only while not typing */
+    /* pasted links: one chip (favicon + page title), removed whole by Backspace */
+    .nlink {
+      display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+      margin: 0 1px; padding: 0 7px 0 5px; border-radius: 6px;
+      font-size: 13px; line-height: 22px; vertical-align: 1px;
+      color: var(--text); text-decoration: none; white-space: nowrap; cursor: pointer;
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+      transition: background .15s, box-shadow .15s;
+      animation: nlink-in .35s cubic-bezier(.22, 1, .36, 1);
+    }
+    .nlink span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .nlink img { width: 14px; height: 14px; flex: none; border-radius: 3px; object-fit: contain; }
+    .nlink:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+    .nlink.loading span { color: var(--muted); }
+    .nlink.loading {
+      background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 22%, transparent) 50%, color-mix(in srgb, var(--accent) 8%, transparent) 100%);
+      background-size: 200% 100%; animation: nlink-shimmer 1.1s linear infinite;
+    }
+    @keyframes nlink-in { from { opacity: 0; transform: translateY(2px) scale(.96); } }
+    @keyframes nlink-shimmer { to { background-position: -200% 0; } }
     .notes-foot {
       margin-top: 16px; color: var(--faint); font-size: 12px;
     }
@@ -880,13 +944,28 @@
           <div id="day-menu" class="day-menu" role="listbox" aria-label="Notes by day" hidden></div>
         </div>
         <div class="notes-meta">
-          <button id="to-today" class="to-today" hidden>Back to today</button>
+          <div class="day-nav">
+            <button id="to-today" class="to-today" title="Back to today" aria-label="Back to today" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 2.5v4M16 2.5v4"/><circle cx="12" cy="13.5" r="1.7" fill="currentColor"/></svg>
+              <span class="lbl">Today</span>
+            </button>
+            <button id="day-prev" class="icon-btn day-arrow" title="Previous day" aria-label="Previous day">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+            </button>
+            <button id="day-next" class="icon-btn day-arrow" title="Next day" aria-label="Next day">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg>
+            </button>
+          </div>
           <span class="save-state" id="notes-status" role="status"></span>
         </div>
       </div>
       <label for="notes" class="visually-hidden" id="notes-label">Today's notes</label>
-      <textarea id="notes" spellcheck="false"
-                placeholder="What's on for today?&#10;&#10;- …"></textarea>
+      <div class="notes-wrap">
+        <div id="notes-ph" class="notes-ph" aria-hidden="true"></div>
+        <div id="notes" class="notes-editor is-empty" contenteditable="true" spellcheck="false"
+             role="textbox" aria-multiline="true" aria-labelledby="notes-label"
+             data-placeholder="What's on for today?"></div>
+      </div>
       <div class="notes-foot">Autosaves · synced across tabs · <kbd>N</kbd> to jump here</div>
     </aside>
 

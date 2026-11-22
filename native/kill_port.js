@@ -116,6 +116,75 @@ function focusApp(app, dir) {
   }
 }
 
+// Title + icon of a web page, for link chips pasted into the notes. Fetched here
+// (not by the extension) so the extension needs no permission to read every site.
+async function pageTitle(raw) {
+  let url;
+  try { url = new URL(raw); } catch { return { ok: false, error: "bad url" }; }
+  if (!/^https?:$/.test(url.protocol)) return { ok: false, error: "only http(s)" };
+  const res = await fetch(url, {
+    redirect: "follow",
+    signal: AbortSignal.timeout(7000),
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+      "Accept-Language": "en,de;q=0.8",
+    },
+  });
+  const final = new URL(res.url || url);
+  const type = res.headers.get("content-type") || "";
+  let html = "";
+  if (/html|xml/i.test(type)) {
+    // the <head> is enough; stop after ~600 KB
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    while (html.length < 600000) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += dec.decode(value, { stream: true });
+      if (/<\/head>/i.test(html)) break;
+    }
+    reader.cancel().catch(() => {});
+  }
+  const decode = (t) => t
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ").trim();
+  const meta = (name) => {
+    const re = new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]*>`, "i");
+    const tag = html.match(re)?.[0];
+    return tag?.match(/content=["']([^"']*)["']/i)?.[1];
+  };
+  const title = decode(meta("og:title") || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
+  const iconHref = html.match(/<link[^>]+rel=["'][^"']*\bicon\b[^"']*["'][^>]*>/i)?.[0]?.match(/href=["']([^"']+)["']/i)?.[1];
+  let icon = null;
+  try { icon = new URL(iconHref ? decode(iconHref) : "/favicon.ico", final).href; } catch {}
+  return { ok: true, url: final.href, title: title.slice(0, 200), icon, site: final.hostname.replace(/^www\./, "") };
+}
+
+// Daily notes mirrored as Markdown files (~/notes/YYYY-MM-DD.md) so other tools
+// (e.g. Claude Code) can read them. Only non-empty notes get a file; clearing a
+// note removes its file. Written atomically (temp file + rename).
+const NOTES_DIR = require("path").join(require("os").homedir(), "notes");
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+function writeNote(date, text) {
+  if (!DAY_RE.test(date || "")) return { ok: false, error: "bad date" };
+  const path = require("path").join(NOTES_DIR, `${date}.md`);
+  const body = String(text ?? "");
+  if (!body.trim()) {
+    if (fs.existsSync(path)) fs.unlinkSync(path);
+    return { ok: true, removed: true };
+  }
+  const out = body.endsWith("\n") ? body : body + "\n";
+  if (fs.existsSync(path) && fs.readFileSync(path, "utf8") === out) return { ok: true, unchanged: true };
+  fs.mkdirSync(NOTES_DIR, { recursive: true });
+  const tmp = `${path}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, out);
+  fs.renameSync(tmp, path);
+  return { ok: true, path };
+}
+
 let buf = Buffer.alloc(0);
 process.stdin.on("data", (chunk) => {
   buf = Buffer.concat([buf, chunk]);
@@ -136,6 +205,23 @@ process.stdin.on("data", (chunk) => {
     } else if (req.type === "ports") {
       try { send(portsInfo(req.ports)); }
       catch (e) { send({ ok: false, error: String(e.message || e) }); }
+    } else if (req.type === "note-save") {
+      try { send(writeNote(req.date, req.text)); }
+      catch (e) { send({ ok: false, error: String(e.message || e) }); }
+    } else if (req.type === "notes-sync") {
+      // one-time backfill: write every non-empty stored note (never deletes files)
+      try {
+        let written = 0;
+        for (const [date, text] of Object.entries(req.notes || {})) {
+          if (String(text || "").trim() && writeNote(date, text).path) written++;
+        }
+        send({ ok: true, written, dir: NOTES_DIR });
+      } catch (e) { send({ ok: false, error: String(e.message || e) }); }
+    } else if (req.type === "title") {
+      pending++;
+      pageTitle(req.url)
+        .then(send, (e) => send({ ok: false, error: String(e.message || e) }))
+        .finally(() => { if (--pending === 0 && ended) process.exit(0); });
     } else if (req.type === "health") {
       try { send(healthSummary(Number(req.days) || 7)); }
       catch (e) { send({ ok: false, error: String(e.message || e) }); }
@@ -147,4 +233,6 @@ process.stdin.on("data", (chunk) => {
     }
   }
 });
-process.stdin.on("end", () => process.exit(0));
+// Async requests (page titles) keep the host alive until they've answered.
+let pending = 0, ended = false;
+process.stdin.on("end", () => { ended = true; if (!pending) process.exit(0); });
