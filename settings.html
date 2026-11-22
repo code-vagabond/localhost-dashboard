@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Localhost Dashboard — Settings</title>
+  <link rel="stylesheet" href="theme.css" />
+  <style>
+    body { display: flex; justify-content: center; padding: 40px 16px; }
+    .wrap { width: 100%; max-width: 640px; }
+    header { margin-bottom: 20px; }
+    a.back {
+      display: inline-flex; align-items: center; gap: 4px;
+      color: var(--muted); text-decoration: none; font-size: 13px;
+      margin-bottom: 14px; border-radius: 4px;
+    }
+    a.back:hover { color: var(--accent); }
+    .eyebrow {
+      color: var(--muted); font-size: 12px; font-weight: 600;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+    h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650; letter-spacing: -.01em; }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+    label.lbl { display: block; font-weight: 600; margin-bottom: 4px; }
+    .hint { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+    #ports {
+      width: 100%; min-height: 120px; resize: vertical;
+      font: 13px/1.6 var(--mono);
+      padding: 10px 12px;
+    }
+    #ports:focus { border-color: var(--accent); }
+    .meta {
+      display: flex; justify-content: space-between; gap: 12px;
+      margin-top: 6px; color: var(--faint); font-size: 12px;
+    }
+    #port-count { font-variant-numeric: tabular-nums; }
+    #port-count.warn { color: var(--bad); }
+    .row { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+    .saved { color: var(--good); font-size: 13px; opacity: 0; transition: opacity .2s; }
+    .saved.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="back" href="dashboard.html">← Back to dashboard</a>
+      <div class="eyebrow">Settings</div>
+      <h1>Ports to scan</h1>
+    </header>
+
+    <div class="panel">
+      <label class="lbl" for="ports">Ports and ranges</label>
+      <div class="hint">Separate with commas or new lines. Use <code>a-b</code> for a range, e.g. <code>3000-3010, 5173, 8080</code>. Each range is capped at 201 ports.</div>
+      <textarea id="ports" spellcheck="false" placeholder="3000-3010, 5173, 8080, 8000"></textarea>
+      <div class="meta">
+        <span id="port-count"></span>
+        <span><kbd>⌘/Ctrl</kbd> + <kbd>Enter</kbd> to save</span>
+      </div>
+
+      <div class="row">
+        <button id="save" class="primary">Save</button>
+        <button id="reset">Restore defaults</button>
+        <span class="saved" id="saved" role="status">Saved ✓ — open dashboards rescan automatically</span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <label class="lbl" style="display:flex;align-items:center;gap:10px;margin:0;cursor:pointer">
+        <input type="checkbox" id="previews" /> Live previews
+      </label>
+      <div class="hint" style="margin:6px 0 0">Embed each app in its card. Heavier: every preview runs the whole app, in every open dashboard tab. Off shows title, description, framework, project folder and command instead.</div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <label class="lbl" for="tram-location">Tram location</label>
+      <div class="hint">A BVG stop or Berlin address, e.g. <code>Alexanderplatz</code> Leave empty to use your current location.</div>
+      <input id="tram-location" type="text" spellcheck="false" placeholder="Use current location" style="width:100%;padding:10px 12px" />
+      <div class="row">
+        <button id="save-tram" class="primary">Save</button>
+        <span class="saved" id="saved-tram" role="status">Saved ✓</span>
+      </div>
+    </div>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>

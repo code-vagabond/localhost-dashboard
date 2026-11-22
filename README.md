@@ -7,9 +7,14 @@ A Chrome extension that scans your localhost ports and shows a **live desktop pr
 ## Features
 
 - **Port scan** — probes a list/range of ports and shows a card for each live service.
-- **Live preview** — embeds each app in an iframe rendered at **1280px desktop width**, scaled to fit the card (so you see the real desktop layout, not the mobile breakpoint).
+- **App info** — each card shows the page title, favicon, meta description and detected framework (one plain GET, no rendering), plus the project folder and start command from the native host. **Live previews** (the app embedded at 1280px desktop width) are optional in Settings — heavier, since each one runs the whole app.
+- **Trams nearby** — next BVG tram departures from the closest stops (current location, or a stop/address set with the ✎ button or in Settings).
+- **Health** — last night's sleep (total, bed/wake, stages) and 7-day sleep / HRV / resting-HR trends from Fitbit / Google Health, read through the native host (`native/health.js`, needs the health-agent CLI at `~/code/health-agent`). Cached; refreshes when older than 30 minutes.
 - **Click to open** — click a card's header bar to open that app in the current tab.
-- **✕ Kill port** — terminate the process listening on a port, straight from the dashboard *(requires the one-time native host setup below)*.
+- **Daily notes** — a note per day (left panel). A fresh note opens automatically each new day; step between days with ‹ › or click the date to pick one. Pasted links become chips with the page title (Backspace removes the whole link). Autosaved and synced across tabs.
+- **Notes as files** — with the native host installed, every non-empty note is also mirrored to `~/notes/YYYY-MM-DD.md` (links as `[Title](url)`), so other tools — e.g. Claude Code — can read them. Written on autosave, on blur / tab hide, and re-synced on each new tab; clearing a note deletes its file. One-way: edits to the files aren't read back.
+- **Recent sessions** — the 7 latest sessions from Claude Code, Claude Desktop (Code tab + Cowork), Codex, Cursor CLI and the Cursor app, with title, first prompt, project and time. Click a row to copy its resume command (`claude --resume …`, `codex resume …`, `cursor-agent --resume …`) and bring Ghostty to the front, ready to paste; Claude Desktop / Cursor rows copy the prompt and bring that app forward. Read from local history files by the native host *(regular Claude Desktop chats live in the cloud and aren't included)*. Run `node native/sessions.js` to see what it finds.
+- **⏻ Kill port** — terminate the process listening on a port, straight from the dashboard *(requires the one-time native host setup below)*.
 
 ---
 
@@ -22,7 +27,7 @@ A Chrome extension that scans your localhost ports and shows a **live desktop pr
 
 The dashboard opens automatically on every **new tab**, or click the toolbar icon.
 
-> **Usage:** type ports/ranges in the input (e.g. `3000-3010, 5173, 8080`) and hit **Scan**. Toggle **auto-refresh 10s** to keep it live.
+> **Usage:** edit the ports/ranges on the **Settings** page (sliders icon, e.g. `3000-3010, 5173, 8080`), hit **Rescan** (or press `R`). Turn on **Auto-refresh** to rescan every 10s — cards for ports that stay up are kept, so previews don't reload.
 
 ---
 
@@ -55,8 +60,8 @@ This:
 
 ### Finish
 1. Reload the extension at `chrome://extensions`.
-2. Open the dashboard — each card now has a red **✕**.
-3. Click ✕ → confirm → the port's process is killed (`SIGTERM`) and the card disappears.
+2. Open the dashboard — each card has a **⏻** (power) button.
+3. Click ⏻ → confirm → the port's process is killed (`SIGTERM`) and the card disappears.
 
 > If you switch Node versions (nvm), just re-run `./native/install.sh <EXTENSION_ID>` to refresh the baked node path.
 
@@ -66,23 +71,25 @@ This:
 
 | Action | How |
 |--------|-----|
-| Scan ports | Enter ports/ranges, click **Scan** |
-| Open an app | Click the card's **header bar** (opens in current tab) |
-| Copy a URL | Click **📋** on the card (copies `http://localhost:PORT/`) |
-| Kill a port | Click **✕** on the card (needs native host) |
-| Auto-refresh | Toggle **auto-refresh 10s** |
+| Rescan ports | Click **Rescan** or press `R` |
+| Edit port list | Sliders icon → Settings (`⌘/Ctrl+Enter` saves) |
+| Open an app | Click the card's **header bar** (current tab); `⌘/Ctrl`- or middle-click for a new tab |
+| Copy a URL | Click the **copy** icon on the card (copies `http://localhost:PORT/`) |
+| Kill a port | Click **⏻** on the card (needs native host) |
+| Auto-refresh | Toggle **Auto-refresh** (every 10s) |
+| Notes | Press `N` to jump into notes, `Esc` to leave; click the date for past days (↑↓ Enter) |
 
 ---
 
 ## Troubleshooting
 
-**✕ says "Specified native messaging host not found"**
+**⏻ says "Specified native messaging host not found"**
 Chrome hasn't picked up the manifest. Fully **quit and reopen Chrome**, then reload the extension.
 
-**✕ says "is the native host installed?"**
+**⏻ says "is the native host installed?"**
 You haven't run `./native/install.sh <EXTENSION_ID>` yet, or the extension ID in the manifest doesn't match. Re-run the installer with the correct ID and reload.
 
-**✕ does nothing / node error**
+**⏻ does nothing / node error**
 The installer couldn't find `node`. Run it from a shell where `node -v` works, or re-run after `nvm use`.
 
 **"Can't embed (X-Frame-Options / CSP)" overlay on a card**
@@ -98,12 +105,17 @@ The host sends `SIGTERM` (graceful). Some servers ignore it — ask to switch to
 ```
 localhost-dashboard/
 ├── manifest.json          # MV3 manifest (storage, tabs, nativeMessaging)
-├── dashboard.html         # Dashboard UI + styles
+├── theme.css              # Shared colors (dark + light), controls, focus styles
+├── dashboard.html         # Dashboard UI + styles (new tab page)
 ├── dashboard.js           # Scan, preview, kill UI logic
-├── background.js          # Service worker: kill message routing
+├── notes.js               # Daily notes: per-day storage, day picker, autosave + cross-tab sync
+├── settings.html / .js    # Port-list settings page
+├── recent.js              # Recent AI sessions list (cached, refreshed on tab focus)
+├── background.js          # Service worker: routes kill + sessions requests to the native host
 ├── native/
-│   ├── kill_port.js       # Native messaging host — lsof + kill
-│   ├── install.sh         # Registers the host with Chrome (run once)
+│   ├── kill_port.js       # Native messaging host — kill ports, sessions, link titles, note files
+│   ├── sessions.js        # Reads Claude/Codex/Cursor session history from local files
+│   ├── install.sh         # Registers the host with Chrome + Edge (run once)
 │   └── run.sh             # Auto-generated launcher (absolute node path)
 └── README.md
 ```
@@ -112,14 +124,16 @@ localhost-dashboard/
 
 ## Other browsers / OSes
 
-The native host manifest path is browser- and OS-specific. `install.sh` targets **Google Chrome on macOS**:
+The native host manifest path is browser- and OS-specific. `install.sh` registers it for **Google Chrome and Microsoft Edge on macOS**:
 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`
+`~/Library/Application Support/Microsoft Edge/NativeMessagingHosts/`
 
-For Chromium, Brave, Edge, or Linux/Windows, the host JSON is identical but the directory differs — see [Chrome native messaging docs](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-host-location). Adjust `TARGET_DIR` in `install.sh` accordingly.
+For Chromium, Brave, or Linux/Windows, the host JSON is identical but the directory differs — see [Chrome native messaging docs](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-host-location). Add it to `TARGET_DIRS` in `install.sh`.
 
 ---
 
 ## Security notes
 
 - The native host only accepts messages from **your** extension ID (`allowed_origins`) and only acts on a `port` number → `lsof` → `kill`. It runs locally with your user permissions.
-- Everything stays on your machine; no network calls leave localhost.
+- The native host also fetches the title of links you paste into notes, and writes notes only into `~/notes/` (date-named files only).
+- No data is sent anywhere else: outside of public transit / weather / air-quality APIs and pasted-link titles, everything stays on your machine.
